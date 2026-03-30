@@ -1,0 +1,21 @@
+# Environment variables — NEVER commit API keys
+.env
+
+# Generated data files (re-created by scrapers each day)
+batter_splits.json
+batter_splits.csv
+mlb_game_odds.json
+mlb_game_odds.csv
+mlb_batter_props.json
+mlb_batter_props.csv
+mlb_pitcher_props.json
+mlb_pitcher_props.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Node / React
+node_modules/
