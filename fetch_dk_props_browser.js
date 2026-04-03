@@ -1,6 +1,6 @@
 /**
  * fetch_dk_props_browser.js
- * ==============================
+ * =========================
  * Run this in Chrome DevTools console while on ANY page at:
  *   https://sportsbook.draftkings.com
  *
@@ -35,7 +35,7 @@
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(u=rl);
+    URL.revokeObjectURL(url);
     console.log('Downloaded:', filename, '(' + data.length + ' records)');
   }
 
