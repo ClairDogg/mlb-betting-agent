@@ -1,104 +1,4 @@
-import { useState, useMemo } from "react";
-
-// ─── Sample data (replace with batter_splits.json from scraper) ───────────
-// Format mirrors exactly what mlb_scraper.py outputs.
-const SAMPLE_DATA = [
-  {
-    player_name: "Yordan Alvarez",
-    team_name: "Houston Astros",
-    venue: "Yankee Stadium",
-    park_hr_factor: 109,
-    park_hit_factor: 101,
-    is_home: false,
-    opp_pitcher_name: "Gerrit Cole",
-    opp_pitcher_hand: "R",
-    vs_lhp_avg: ".241", vs_lhp_hr: 4,  vs_lhp_h: 28,  vs_lhp_ab: 116,
-    vs_rhp_avg: ".312", vs_rhp_hr: 18, vs_rhp_h: 72,  vs_rhp_ab: 231,
-    home_avg: ".308", home_hr: 12, home_h: 48,
-    away_avg: ".293", away_hr: 10, away_h: 44,
-    Apr_avg: ".241", May_avg: ".278", Jun_avg: ".305", Jul_avg: ".322",
-    Aug_avg: ".341", Sep_avg: ".315",
-    bvp_avg: ".333", bvp_hr: 2, bvp_h: 4, bvp_ab: 12,
-    hr_line: 0.5, hr_odds: "+140",
-    hit_line: 1.5, hit_odds: "+105",
-  },
-  {
-    player_name: "Freddie Freeman",
-    team_name: "Los Angeles Dodgers",
-    venue: "Dodger Stadium",
-    park_hr_factor: 99,
-    park_hit_factor: 100,
-    is_home: true,
-    opp_pitcher_name: "Corbin Burnes",
-    opp_pitcher_hand: "R",
-    vs_lhp_avg: ".290", vs_lhp_hr: 3,  vs_lhp_h: 22,  vs_lhp_ab: 76,
-    vs_rhp_avg: ".315", vs_rhp_hr: 14, vs_rhp_h: 65,  vs_rhp_ab: 206,
-    home_avg: ".330", home_hr: 10, home_h: 56,
-    away_avg: ".278", away_hr: 7,  away_h: 33,
-    Apr_avg: ".304", May_avg: ".318", Jun_avg: ".292", Jul_avg: ".335",
-    Aug_avg: ".348", Sep_avg: ".301",
-    bvp_avg: ".400", bvp_hr: 1, bvp_h: 4, bvp_ab: 10,
-    hr_line: 0.5, hr_odds: "+150",
-    hit_line: 1.5, hit_odds: "-110",
-  },
-  {
-    player_name: "Matt Olson",
-    team_name: "Atlanta Braves",
-    venue: "Truist Park",
-    park_hr_factor: 102,
-    park_hit_factor: 100,
-    is_home: true,
-    opp_pitcher_name: "Spencer Strider",
-    opp_pitcher_hand: "R",
-    vs_lhp_avg: ".255", vs_lhp_hr: 6,  vs_lhp_h: 20,  vs_lhp_ab: 78,
-    vs_rhp_avg: ".245", vs_rhp_hr: 22, vs_rhp_h: 58,  vs_rhp_ab: 237,
-    home_avg: ".260", home_hr: 15, home_h: 42,
-    away_avg: ".238", away_hr: 13, away_h: 36,
-    Apr_avg: ".220", May_avg: ".255", Jun_avg: ".280", Jul_avg: ".295",
-    Aug_avg: ".270", Sep_avg: ".248",
-    bvp_avg: ".125", bvp_hr: 0, bvp_h: 1, bvp_ab: 8,
-    hr_line: 0.5, hr_odds: "+165",
-    hit_line: 1.5, hit_odds: "+115",
-  },
-  {
-    player_name: "Gunnar Henderson",
-    team_name: "Baltimore Orioles",
-    venue: "Camden Yards",
-    park_hr_factor: 105,
-    park_hit_factor: 103,
-    is_home: true,
-    opp_pitcher_name: "Kevin Gausman",
-    opp_pitcher_hand: "R",
-    vs_lhp_avg: ".261", vs_lhp_hr: 5,  vs_lhp_h: 18,  vs_lhp_ab: 69,
-    vs_rhp_avg: ".282", vs_rhp_hr: 16, vs_rhp_h: 55,  vs_rhp_ab: 195,
-    home_avg: ".299", home_hr: 13, home_h: 47,
-    away_avg: ".258", away_hr: 8,  away_h: 26,
-    Apr_avg: ".275", May_avg: ".291", Jun_avg: ".305", Jul_avg: ".278",
-    Aug_avg: ".320", Sep_avg: ".288",
-    bvp_avg: ".000", bvp_hr: 0, bvp_h: 0, bvp_ab: 3,
-    hr_line: 0.5, hr_odds: "+180",
-    hit_line: 1.5, hit_odds: "+100",
-  },
-  {
-    player_name: "Cody Bellinger",
-    team_name: "New York Yankees",
-    venue: "Yankee Stadium",
-    park_hr_factor: 109,
-    park_hit_factor: 101,
-    is_home: true,
-    opp_pitcher_name: "Framber Valdez",
-    opp_pitcher_hand: "L",
-    vs_lhp_avg: ".198", vs_lhp_hr: 2,  vs_lhp_h: 14,  vs_lhp_ab: 71,
-    vs_rhp_avg: ".275", vs_rhp_hr: 12, vs_rhp_h: 44,  vs_rhp_ab: 160,
-    home_avg: ".272", home_hr: 9,  home_h: 35,
-    away_avg: ".220", away_hr: 5,  away_h: 23,
-    Apr_avg: ".245", May_avg: ".260", Jun_avg: ".215", Jul_avg: ".279",
-    Aug_avg: ".261", Sep_avg: ".238",
-    bvp_avg: ".182", bvp_hr: 0, bvp_h: 2, bvp_ab: 11,
-    hr_line: 0.5, hr_odds: "+200",
-    hit_line: 1.5, hit_odds: "+130",
-  },
-];
+import { useState, useMemo, useEffect } from "react";
 
 // ─── Scoring Engine ───────────────────────────────────────────────────────
 
@@ -317,9 +217,9 @@ function BatterCard({ batter }) {
         {/* HR row */}
         <div style={STYLE.propRow}>
           <span>Home Runs</span>
-          <span>{batter.hr_line}</span>
+          <span>{batter.hr_line ?? "—"}</span>
           <span style={batter.hrPlus ? STYLE.plusOdds : {}}>
-            {batter.hr_odds}
+            {batter.hr_odds ?? "N/A"}
           </span>
           <span></span>
           <span style={verdictStyle(batter.hrBet)}>{batter.hrBet}</span>
@@ -328,9 +228,9 @@ function BatterCard({ batter }) {
         {/* Hits row */}
         <div style={STYLE.propRow}>
           <span>Hits</span>
-          <span>{batter.hit_line}</span>
+          <span>{batter.hit_line ?? "—"}</span>
           <span style={batter.hitPlus ? STYLE.plusOdds : {}}>
-            {batter.hit_odds}
+            {batter.hit_odds ?? "N/A"}
           </span>
           <span></span>
           <span style={verdictStyle(batter.hitBet)}>{batter.hitBet}</span>
@@ -363,11 +263,21 @@ function BatterCard({ batter }) {
 
 export default function HiddenGemsAgent() {
   const [filter, setFilter] = useState("all");
+  const [rawData, setRawData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
-  const scored = useMemo(() =>
-    SAMPLE_DATA.map(scoreBatter).sort((a, b) => b.gemScore - a.gemScore),
-    []
-  );
+  useEffect(() => {
+    fetch("./merged_batter_data.json")
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+      .catch(() => fetch("./batter_splits.json").then(r => r.json()))
+      .then(setRawData)
+      .catch(e => setLoadError(e.message));
+  }, []);
+
+  const scored = useMemo(() => {
+    if (!rawData) return [];
+    return rawData.map(scoreBatter).sort((a, b) => b.gemScore - a.gemScore);
+  }, [rawData]);
 
   const filtered = useMemo(() => {
     if (filter === "best")  return scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★"));
@@ -378,6 +288,17 @@ export default function HiddenGemsAgent() {
   }, [scored, filter]);
 
   const bestCount = scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★")).length;
+
+  if (loadError) return (
+    <div style={{ ...STYLE.base, color: "#c00" }}>
+      Failed to load data: {loadError}<br />
+      Make sure you ran <code>python3 mlb_stats_scraper.py</code> and are serving via <code>python3 -m http.server 8080</code>.
+    </div>
+  );
+
+  if (!rawData) return (
+    <div style={{ ...STYLE.base, color: "#888" }}>Loading today's data…</div>
+  );
 
   return (
     <div style={STYLE.base}>
@@ -412,7 +333,7 @@ export default function HiddenGemsAgent() {
       {filtered.map(b => <BatterCard key={b.player_name} batter={b} />)}
 
       <div style={{ fontSize: 11, color: "#bbb", marginTop: 20, borderTop: "1px solid #eee", paddingTop: 8 }}>
-        Sample data shown — replace SAMPLE_DATA with output from mlb_scraper.py · Gem score = sum of 5 factors (handedness, monthly, home/away, park, bvp) · score ≥3 = BET, plus money = ★ BEST BET
+        Data: merged_batter_data.json (falls back to batter_splits.json) · Gem score = sum of 5 factors (handedness, monthly, home/away, park, bvp) · score ≥3 = BET, plus money = ★ BEST BET
       </div>
     </div>
   );
