@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hidden Gems · Batting Props</title>
+  <title>Hidden Gems · MLB Props</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -19,89 +19,155 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect } = React;
 
-    // ─── Scoring Engine ───────────────────────────────────────────────────
+    // ─── Shared helpers ───────────────────────────────────────────────────
+    function isPlusMoney(odds) {
+      return typeof odds === "string" && odds.startsWith("+");
+    }
+
+    function fmtAvg(val) {
+      const n = parseFloat(val) || 0;
+      return "." + String(Math.round(n * 1000)).padStart(3, "0");
+    }
+
+    // ─── BATTER scoring ───────────────────────────────────────────────────
     const MONTHS = ["Apr","May","Jun","Jul","Aug","Sep","Oct"];
-
     function getCurrentMonth() {
-      const m = new Date().getMonth(); // 0-indexed
-      return MONTHS[Math.max(0, m - 3)] || "Aug";
+      return MONTHS[Math.max(0, new Date().getMonth() - 3)] || "Aug";
     }
 
-    function scoreHandedness(batter) {
-      const hand = batter.opp_pitcher_hand;
-      const avg = parseFloat(hand === "L" ? batter.vs_lhp_avg : batter.vs_rhp_avg) || 0;
-      const ab  = (hand === "L" ? batter.vs_lhp_ab : batter.vs_rhp_ab) || 0;
+    function scoreHandedness(b) {
+      const hand = b.opp_pitcher_hand;
+      const avg  = parseFloat(hand === "L" ? b.vs_lhp_avg : b.vs_rhp_avg) || 0;
+      const ab   = (hand === "L" ? b.vs_lhp_ab : b.vs_rhp_ab) || 0;
       if (ab < 20) return { score: 0, note: `vs ${hand}HP — thin sample (${ab} AB)` };
-      if (avg >= 0.300) return { score: 2, note: `vs ${hand}HP .${String(Math.round(avg*1000)).padStart(3,"0")} avg (${ab} AB) ✓` };
-      if (avg >= 0.265) return { score: 1, note: `vs ${hand}HP .${String(Math.round(avg*1000)).padStart(3,"0")} avg (${ab} AB)` };
-      return { score: 0, note: `vs ${hand}HP .${String(Math.round(avg*1000)).padStart(3,"0")} avg — weak` };
+      if (avg >= 0.300) return { score: 2, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB) ✓` };
+      if (avg >= 0.265) return { score: 1, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB)` };
+      return { score: 0, note: `vs ${hand}HP ${fmtAvg(avg)} avg — weak` };
     }
 
-    function scoreMonthly(batter) {
+    function scoreMonthly(b) {
       const month = getCurrentMonth();
-      const avg = parseFloat(batter[`${month}_avg`]) || 0;
+      const avg   = parseFloat(b[`${month}_avg`]) || 0;
       if (!avg) return { score: 0, note: `${month} — no data` };
-      if (avg >= 0.310) return { score: 2, note: `${month} avg .${String(Math.round(avg*1000)).padStart(3,"0")} — peak month ✓` };
-      if (avg >= 0.270) return { score: 1, note: `${month} avg .${String(Math.round(avg*1000)).padStart(3,"0")}` };
-      return { score: 0, note: `${month} avg .${String(Math.round(avg*1000)).padStart(3,"0")} — cold month` };
+      if (avg >= 0.310) return { score: 2, note: `${month} avg ${fmtAvg(avg)} — peak month ✓` };
+      if (avg >= 0.270) return { score: 1, note: `${month} avg ${fmtAvg(avg)}` };
+      return { score: 0, note: `${month} avg ${fmtAvg(avg)} — cold month` };
     }
 
-    function scoreHomeAway(batter) {
-      const avg = parseFloat(batter.is_home ? batter.home_avg : batter.away_avg) || 0;
-      const loc = batter.is_home ? "home" : "away";
-      if (avg >= 0.300) return { score: 2, note: `${loc} .${String(Math.round(avg*1000)).padStart(3,"0")} avg ✓` };
-      if (avg >= 0.265) return { score: 1, note: `${loc} .${String(Math.round(avg*1000)).padStart(3,"0")} avg` };
-      return { score: 0, note: `${loc} .${String(Math.round(avg*1000)).padStart(3,"0")} — struggles` };
+    function scoreHomeAway(b) {
+      const avg = parseFloat(b.is_home ? b.home_avg : b.away_avg) || 0;
+      const loc = b.is_home ? "home" : "away";
+      if (avg >= 0.300) return { score: 2, note: `${loc} ${fmtAvg(avg)} avg ✓` };
+      if (avg >= 0.265) return { score: 1, note: `${loc} ${fmtAvg(avg)} avg` };
+      return { score: 0, note: `${loc} ${fmtAvg(avg)} — struggles` };
     }
 
-    function scorePark(batter, type) {
-      const factor = type === "hr" ? batter.park_hr_factor : batter.park_hit_factor;
+    function scorePark(b, type) {
+      const factor = type === "hr" ? b.park_hr_factor : b.park_hit_factor;
       if (factor >= 108) return { score: 2, note: `park ${type} factor ${factor} — hitter friendly ✓` };
       if (factor >= 102) return { score: 1, note: `park ${type} factor ${factor} — slight boost` };
       if (factor <= 92)  return { score: -1, note: `park ${type} factor ${factor} — pitcher park ✗` };
       return { score: 0, note: `park ${type} factor ${factor} — neutral` };
     }
 
-    function scoreBvP(batter) {
-      const ab  = batter.bvp_ab || 0;
-      const avg = parseFloat(batter.bvp_avg) || 0;
-      if (ab < 5) return { score: 0, note: `vs ${batter.opp_pitcher_name} — ${ab} AB, too thin` };
-      if (avg >= 0.350) return { score: 2, note: `vs ${batter.opp_pitcher_name} .${String(Math.round(avg*1000)).padStart(3,"0")} in ${ab} AB ✓` };
-      if (avg >= 0.270) return { score: 1, note: `vs ${batter.opp_pitcher_name} .${String(Math.round(avg*1000)).padStart(3,"0")} in ${ab} AB` };
-      return { score: -1, note: `vs ${batter.opp_pitcher_name} .${String(Math.round(avg*1000)).padStart(3,"0")} in ${ab} AB ✗` };
+    function scoreBvP(b) {
+      const ab  = b.bvp_ab || 0;
+      const avg = parseFloat(b.bvp_avg) || 0;
+      if (ab < 5) return { score: 0, note: `vs ${b.opp_pitcher_name} — ${ab} AB, too thin` };
+      if (avg >= 0.350) return { score: 2, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB ✓` };
+      if (avg >= 0.270) return { score: 1, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB` };
+      return { score: -1, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB ✗` };
     }
 
-    function isPlusMoney(odds) {
-      return typeof odds === "string" && odds.startsWith("+");
-    }
-
-    function scoreBatter(batter) {
-      const h   = scoreHandedness(batter);
-      const m   = scoreMonthly(batter);
-      const ha  = scoreHomeAway(batter);
-      const pk  = scorePark(batter, "hr");
-      const bvp = scoreBvP(batter);
+    function scoreBatter(b) {
+      const h   = scoreHandedness(b);
+      const m   = scoreMonthly(b);
+      const ha  = scoreHomeAway(b);
+      const pk  = scorePark(b, "hr");
+      const bvp = scoreBvP(b);
       const total = h.score + m.score + ha.score + pk.score + bvp.score;
 
-      const hrPlus = isPlusMoney(batter.hr_odds);
+      const hrPlus = isPlusMoney(b.hr_odds);
       const hrBet  = total >= 3 ? (hrPlus ? "★ BEST BET" : "BET OVER") : total >= 2 ? "LEAN OVER" : "PASS";
 
-      const hitPk   = scorePark(batter, "hits");
+      const hitPk    = scorePark(b, "hits");
       const hitTotal = m.score + ha.score + hitPk.score + bvp.score;
-      const hitPlus  = isPlusMoney(batter.hit_odds);
+      const hitPlus  = isPlusMoney(b.hit_odds);
       const hitBet   = hitTotal >= 3 ? (hitPlus ? "★ BEST BET" : "BET OVER") : hitTotal >= 2 ? "LEAN OVER" : "PASS";
 
-      return { ...batter, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvp }, gemScore: total, hrBet, hrPlus, hitBet, hitPlus };
+      return { ...b, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvp }, gemScore: total, hrBet, hrPlus, hitBet, hitPlus };
     }
 
-    // ─── Styles ───────────────────────────────────────────────────────────
+    // ─── PITCHER scoring ──────────────────────────────────────────────────
+    function scoreKRate(p) {
+      const k9 = p.season_k9 || 0;
+      const gs = p.season_gs || 0;
+      if (gs < 2) return { score: 0, note: "K/9 — too few starts" };
+      if (k9 >= 10.0) return { score: 2, note: `K/9: ${k9} — elite ✓` };
+      if (k9 >= 8.0)  return { score: 1, note: `K/9: ${k9} — solid` };
+      if (k9 < 6.5)   return { score: -1, note: `K/9: ${k9} — low ✗` };
+      return { score: 0, note: `K/9: ${k9} — average` };
+    }
+
+    function scoreOppKRate(p) {
+      const rate = p.opp_team_k_rate || 0;
+      if (!rate) return { score: 0, note: "Opp K rate — no data" };
+      if (rate >= 25) return { score: 2, note: `${p.opp_team_name} K%: ${rate}% — strikeout-prone ✓` };
+      if (rate >= 22) return { score: 1, note: `${p.opp_team_name} K%: ${rate}%` };
+      if (rate <= 17) return { score: -1, note: `${p.opp_team_name} K%: ${rate}% — contact lineup ✗` };
+      return { score: 0, note: `${p.opp_team_name} K%: ${rate}% — average` };
+    }
+
+    function scoreRecentKs(p) {
+      const avg  = p.recent_avg_k || 0;
+      const list = p.recent_k_list || [];
+      if (!list.length) return { score: 0, note: "Recent form — no data" };
+      if (avg >= 8) return { score: 2, note: `Avg ${avg} Ks last ${list.length} starts [${list.join(", ")}] ✓` };
+      if (avg >= 6) return { score: 1, note: `Avg ${avg} Ks last ${list.length} starts [${list.join(", ")}]` };
+      if (avg <= 3) return { score: -1, note: `Avg ${avg} Ks last ${list.length} starts [${list.join(", ")}] ✗` };
+      return { score: 0, note: `Avg ${avg} Ks last ${list.length} starts [${list.join(", ")}]` };
+    }
+
+    function scoreDepth(p) {
+      const ips = p.season_ip_per_start || 0;
+      if (!ips) return { score: 0, note: "Innings depth — no data" };
+      if (ips >= 6.0) return { score: 2, note: `${ips} IP/start — goes deep ✓` };
+      if (ips >= 5.0) return { score: 1, note: `${ips} IP/start — avg depth` };
+      if (ips < 4.0)  return { score: -1, note: `${ips} IP/start — short outings ✗` };
+      return { score: 0, note: `${ips} IP/start` };
+    }
+
+    function scoreParkK(p) {
+      const f = p.park_k_factor || 100;
+      if (f >= 103) return { score: 1, note: `${p.venue} K factor: ${f} — K-friendly ✓` };
+      if (f <= 96)  return { score: -1, note: `${p.venue} K factor: ${f} — suppresses Ks ✗` };
+      return { score: 0, note: `${p.venue} K factor: ${f} — neutral` };
+    }
+
+    function scorePitcher(p) {
+      const kr     = scoreKRate(p);
+      const opp    = scoreOppKRate(p);
+      const recent = scoreRecentKs(p);
+      const depth  = scoreDepth(p);
+      const park   = scoreParkK(p);
+      const total  = kr.score + opp.score + recent.score + depth.score + park.score;
+
+      const kPlus = isPlusMoney(p.k_odds);
+      const kBet  = total >= 3 ? (kPlus ? "★ BEST BET" : "BET OVER") : total >= 2 ? "LEAN OVER" : "PASS";
+
+      return { ...p, factors: { kRate: kr, oppKRate: opp, recentKs: recent, depth, parkK: park }, gemScore: total, kBet, kPlus };
+    }
+
+    // ─── Shared styles ────────────────────────────────────────────────────
     const S = {
-      base:       { fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 15, background: "#fff", color: "#111", padding: "20px 24px", maxWidth: 900, margin: "0 auto", lineHeight: 1.6 },
-      header:     { borderBottom: "2px solid #111", paddingBottom: 8, marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-end" },
-      title:      { fontSize: 20, fontWeight: 700, margin: 0 },
+      base:       { fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 15, background: "#fff", color: "#111", padding: "20px 24px", maxWidth: 960, margin: "0 auto", lineHeight: 1.6 },
+      tabRow:     { display: "flex", gap: 0, marginBottom: 24, borderBottom: "2px solid #111" },
+      tab:        (a) => ({ padding: "8px 20px", fontSize: 15, fontWeight: a ? 700 : 400, border: "none", borderBottom: a ? "2px solid #111" : "none", marginBottom: -2, background: "none", cursor: "pointer", color: "#111" }),
+      header:     { paddingBottom: 8, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "flex-end" },
+      title:      { fontSize: 18, fontWeight: 700, margin: 0 },
       subtitle:   { fontSize: 13, color: "#555", margin: "2px 0 0" },
       bestCount:  { fontSize: 13, fontWeight: 600 },
-      filterRow:  { display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" },
+      filterRow:  { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" },
       filterBtn:  (a) => ({ padding: "4px 12px", fontSize: 13, border: "1px solid #111", background: a ? "#111" : "#fff", color: a ? "#fff" : "#111", cursor: "pointer", borderRadius: 2 }),
       card:       (b) => ({ border: b ? "2px solid #111" : "1px solid #ccc", marginBottom: 12, borderRadius: 2, overflow: "hidden" }),
       cardHeader: (b) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 12px", background: b ? "#111" : "#f5f5f5", color: b ? "#fff" : "#111", fontWeight: 600, fontSize: 15, cursor: "pointer" }),
@@ -116,6 +182,7 @@
       factorList: { marginTop: 8, fontSize: 13, color: "#444" },
       factorRow:  (s) => ({ display: "flex", gap: 6, alignItems: "center", padding: "1px 0", color: s >= 2 ? "#111" : s === 1 ? "#444" : s < 0 ? "#aaa" : "#888" }),
       dot:        (s) => ({ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: s >= 2 ? "#111" : s === 1 ? "#777" : s < 0 ? "#ddd" : "#bbb" }),
+      footer:     { fontSize: 11, color: "#bbb", marginTop: 20, borderTop: "1px solid #eee", paddingTop: 8 },
     };
 
     function verdictStyle(v) {
@@ -126,60 +193,47 @@
     }
 
     // ─── BatterCard ───────────────────────────────────────────────────────
-    function BatterCard({ batter }) {
+    function BatterCard({ batter: b }) {
       const [open, setOpen] = useState(false);
-      const isBest = batter.hrBet.startsWith("★") || batter.hitBet.startsWith("★");
-      const loc = batter.is_home ? "Home" : "Away";
-
+      const isBest = b.hrBet.startsWith("★") || b.hitBet.startsWith("★");
       return (
         <div style={S.card(isBest)}>
           <div style={S.cardHeader(isBest)} onClick={() => setOpen(o => !o)}>
             <span>
-              {batter.player_name}
+              {b.player_name}
               <span style={{ fontWeight: 400, fontSize: 13, marginLeft: 10, opacity: 0.75 }}>
-                {batter.team_name} · {loc} vs {batter.opp_pitcher_hand}HP {batter.opp_pitcher_name} · {batter.venue}
+                {b.team_name} · {b.is_home ? "Home" : "Away"} vs {b.opp_pitcher_hand}HP {b.opp_pitcher_name} · {b.venue}
               </span>
             </span>
-            <span style={S.gemScore}>
-              {batter.gemScore >= 3 ? "💎 " : ""}{batter.gemScore}/7
-            </span>
+            <span style={S.gemScore}>{b.gemScore >= 3 ? "💎 " : ""}{b.gemScore}/7</span>
           </div>
-
           <div style={S.body}>
-            <div style={S.propHeader}>
-              <span>Prop</span><span>Line</span><span>Odds</span><span></span><span>Verdict</span>
-            </div>
+            <div style={S.propHeader}><span>Prop</span><span>Line</span><span>Odds</span><span></span><span>Verdict</span></div>
             <div style={S.propRow}>
               <span>Home Runs</span>
-              <span>{batter.hr_line ?? "—"}</span>
-              <span style={batter.hrPlus ? S.plusOdds : {}}>{batter.hr_odds ?? "N/A"}</span>
+              <span>{b.hr_line ?? "—"}</span>
+              <span style={b.hrPlus ? S.plusOdds : {}}>{b.hr_odds ?? "N/A"}</span>
               <span></span>
-              <span style={verdictStyle(batter.hrBet)}>{batter.hrBet}</span>
+              <span style={verdictStyle(b.hrBet)}>{b.hrBet}</span>
             </div>
             <div style={S.propRow}>
               <span>Hits</span>
-              <span>{batter.hit_line ?? "—"}</span>
-              <span style={batter.hitPlus ? S.plusOdds : {}}>{batter.hit_odds ?? "N/A"}</span>
+              <span>{b.hit_line ?? "—"}</span>
+              <span style={b.hitPlus ? S.plusOdds : {}}>{b.hit_odds ?? "N/A"}</span>
               <span></span>
-              <span style={verdictStyle(batter.hitBet)}>{batter.hitBet}</span>
+              <span style={verdictStyle(b.hitBet)}>{b.hitBet}</span>
             </div>
-
             {open && (
               <div style={S.factorList}>
-                <div style={{ fontSize: 11, color: "#aaa", marginTop: 8, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Factor Breakdown
-                </div>
-                {Object.entries(batter.factors).map(([key, f]) => (
-                  <div key={key} style={S.factorRow(f.score)}>
-                    <div style={S.dot(f.score)} />
-                    <span>{f.note}</span>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 8, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.5px" }}>Factor Breakdown</div>
+                {Object.entries(b.factors).map(([k, f]) => (
+                  <div key={k} style={S.factorRow(f.score)}>
+                    <div style={S.dot(f.score)} /><span>{f.note}</span>
                   </div>
                 ))}
               </div>
             )}
-
-            <div style={{ fontSize: 11, color: "#bbb", marginTop: 6, cursor: "pointer" }}
-                 onClick={() => setOpen(o => !o)}>
+            <div style={{ fontSize: 11, color: "#bbb", marginTop: 6, cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
               {open ? "▲ hide factors" : "▼ show factors"}
             </div>
           </div>
@@ -187,22 +241,59 @@
       );
     }
 
-    // ─── Main App ─────────────────────────────────────────────────────────
-    function HiddenGemsAgent() {
-      const [filter, setFilter]   = useState("bets");
-      const [rawData, setRawData] = useState(null);
-      const [loadError, setLoadError] = useState(null);
+    // ─── PitcherCard ──────────────────────────────────────────────────────
+    function PitcherCard({ pitcher: p }) {
+      const [open, setOpen] = useState(false);
+      const isBest = p.kBet.startsWith("★");
+      const loc = p.is_home ? "Home" : "Away";
+      return (
+        <div style={S.card(isBest)}>
+          <div style={S.cardHeader(isBest)} onClick={() => setOpen(o => !o)}>
+            <span>
+              {p.pitcher_name}
+              <span style={{ fontWeight: 400, fontSize: 13, marginLeft: 10, opacity: 0.75 }}>
+                {p.team_name} · {loc} vs {p.opp_team_name} · {p.venue}
+              </span>
+            </span>
+            <span style={S.gemScore}>{p.gemScore >= 3 ? "💎 " : ""}{p.gemScore}/8</span>
+          </div>
+          <div style={S.body}>
+            <div style={{ display: "flex", gap: 24, fontSize: 13, color: "#555", marginBottom: 8 }}>
+              <span>ERA: <strong>{p.season_era ?? "—"}</strong></span>
+              <span>WHIP: <strong>{p.season_whip ?? "—"}</strong></span>
+              <span>K/9: <strong>{p.season_k9 ?? "—"}</strong></span>
+              <span>IP/start: <strong>{p.season_ip_per_start ?? "—"}</strong></span>
+              <span>GS: <strong>{p.season_gs ?? "—"}</strong></span>
+            </div>
+            <div style={S.propHeader}><span>Prop</span><span>Line</span><span>Odds</span><span></span><span>Verdict</span></div>
+            <div style={S.propRow}>
+              <span>Strikeouts</span>
+              <span>{p.k_line ?? "—"}</span>
+              <span style={p.kPlus ? S.plusOdds : {}}>{p.k_odds ?? "N/A"}</span>
+              <span></span>
+              <span style={verdictStyle(p.kBet)}>{p.kBet}</span>
+            </div>
+            {open && (
+              <div style={S.factorList}>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 8, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.5px" }}>Factor Breakdown</div>
+                {Object.entries(p.factors).map(([k, f]) => (
+                  <div key={k} style={S.factorRow(f.score)}>
+                    <div style={S.dot(f.score)} /><span>{f.note}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "#bbb", marginTop: 6, cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
+              {open ? "▲ hide factors" : "▼ show factors"}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
-      useEffect(() => {
-        fetch("./merged_batter_data.json")
-          .then(r => { if (!r.ok) throw new Error("merged not found"); return r.json(); })
-          .catch(() => fetch("./batter_splits.json").then(r => {
-            if (!r.ok) throw new Error("batter_splits.json not found — run mlb_stats_scraper.py first");
-            return r.json();
-          }))
-          .then(setRawData)
-          .catch(e => setLoadError(e.message));
-      }, []);
+    // ─── Batters section ──────────────────────────────────────────────────
+    function BattersSection({ rawData }) {
+      const [filter, setFilter] = useState("bets");
 
       const scored = useMemo(() => {
         if (!rawData) return [];
@@ -210,66 +301,135 @@
       }, [rawData]);
 
       const filtered = useMemo(() => {
-        if (filter === "bets")  return scored.filter(b => b.hrBet.startsWith("BET") || b.hrBet.startsWith("★") || b.hitBet.startsWith("BET") || b.hitBet.startsWith("★"));
-        if (filter === "best")  return scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★"));
-        if (filter === "hr")    return scored.filter(b => b.hrBet !== "PASS");
-        if (filter === "hits")  return scored.filter(b => b.hitBet !== "PASS");
-        if (filter === "plus")  return scored.filter(b => b.hrPlus || b.hitPlus);
+        if (filter === "bets") return scored.filter(b => b.hrBet.startsWith("BET") || b.hrBet.startsWith("★") || b.hitBet.startsWith("BET") || b.hitBet.startsWith("★"));
+        if (filter === "best") return scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★"));
+        if (filter === "hr")   return scored.filter(b => b.hrBet !== "PASS");
+        if (filter === "hits") return scored.filter(b => b.hitBet !== "PASS");
+        if (filter === "plus") return scored.filter(b => b.hrPlus || b.hitPlus);
         return scored;
       }, [scored, filter]);
 
       const bestCount = scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★")).length;
-
-      if (loadError) return (
-        <div style={{ ...S.base, color: "#c00" }}>
-          <strong>Error loading data:</strong> {loadError}<br /><br />
-          Steps to fix:<br />
-          1. Run <code>python3 mlb_stats_scraper.py</code> in the project folder<br />
-          2. Serve this folder: <code>python3 -m http.server 8080</code><br />
-          3. Open <code>http://localhost:8080</code> in your browser
-        </div>
-      );
-
-      if (!rawData) return (
-        <div style={{ ...S.base, color: "#888" }}>Loading today's data…</div>
-      );
-
-      const pulledAt = rawData[0]?.pulled_at
-        ? new Date(rawData[0].pulled_at).toLocaleString()
-        : "unknown";
+      const pulledAt  = rawData?.[0]?.pulled_at ? new Date(rawData[0].pulled_at).toLocaleString() : "unknown";
 
       return (
-        <div style={S.base}>
+        <div>
           <div style={S.header}>
             <div>
-              <div style={S.title}>Hidden Gems · Batting Props</div>
-              <div style={S.subtitle}>
-                {rawData.length} batters · data pulled {pulledAt} · HR · Hits · Scored across: handedness, monthly trend, home/away, park factor, head-to-head
-              </div>
+              <div style={S.title}>Batting Props — HR & Hits</div>
+              <div style={S.subtitle}>{rawData?.length ?? 0} batters · data pulled {pulledAt}</div>
             </div>
             <div style={S.bestCount}>★ Best Bets: {bestCount}</div>
           </div>
-
           <div style={S.filterRow}>
             {[["bets","BET OVER+"],["best","★ Best Bets"],["plus","+ Odds Only"],["hr","HR Props"],["hits","Hit Props"],["all","All Players"]].map(([key, label]) => (
               <button key={key} style={S.filterBtn(filter === key)} onClick={() => setFilter(key)}>{label}</button>
             ))}
           </div>
-
-          {filtered.length === 0 && (
-            <div style={{ color: "#888", fontSize: 14 }}>No players match this filter today.</div>
-          )}
-
+          {filtered.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>No players match this filter.</div>}
           {filtered.map(b => <BatterCard key={b.player_id || b.player_name} batter={b} />)}
-
-          <div style={{ fontSize: 11, color: "#bbb", marginTop: 20, borderTop: "1px solid #eee", paddingTop: 8 }}>
-            Gem score = sum of 5 factors (handedness, monthly, home/away, park, bvp) · max 7 · score ≥3 = BET · plus money + score ≥3 = ★ BEST BET · odds show N/A until DraftKings props are loaded
+          <div style={S.footer}>
+            Gem score = handedness + monthly + home/away + park + BvP · max 7 · score ≥3 = BET · plus money + score ≥3 = ★ BEST BET
           </div>
         </div>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<HiddenGemsAgent />);
+    // ─── Pitchers section ─────────────────────────────────────────────────
+    function PitchersSection({ rawData }) {
+      const [filter, setFilter] = useState("bets");
+
+      const scored = useMemo(() => {
+        if (!rawData) return [];
+        return rawData.map(scorePitcher).sort((a, b) => b.gemScore - a.gemScore);
+      }, [rawData]);
+
+      const filtered = useMemo(() => {
+        if (filter === "bets") return scored.filter(p => p.kBet.startsWith("BET") || p.kBet.startsWith("★"));
+        if (filter === "best") return scored.filter(p => p.kBet.startsWith("★"));
+        if (filter === "plus") return scored.filter(p => p.kPlus);
+        return scored;
+      }, [scored, filter]);
+
+      const bestCount = scored.filter(p => p.kBet.startsWith("★")).length;
+      const pulledAt  = rawData?.[0]?.pulled_at ? new Date(rawData[0].pulled_at).toLocaleString() : "unknown";
+
+      return (
+        <div>
+          <div style={S.header}>
+            <div>
+              <div style={S.title}>Pitcher Props — Strikeouts</div>
+              <div style={S.subtitle}>{rawData?.length ?? 0} probable starters · data pulled {pulledAt}</div>
+            </div>
+            <div style={S.bestCount}>★ Best Bets: {bestCount}</div>
+          </div>
+          <div style={S.filterRow}>
+            {[["bets","BET OVER+"],["best","★ Best Bets"],["plus","+ Odds Only"],["all","All Starters"]].map(([key, label]) => (
+              <button key={key} style={S.filterBtn(filter === key)} onClick={() => setFilter(key)}>{label}</button>
+            ))}
+          </div>
+          {filtered.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>No starters match this filter.</div>}
+          {filtered.map(p => <PitcherCard key={p.pitcher_id || p.pitcher_name} pitcher={p} />)}
+          <div style={S.footer}>
+            Gem score = K/9 + opp K rate + recent Ks + innings depth + park · max 8 · score ≥3 = BET · plus money + score ≥3 = ★ BEST BET
+          </div>
+        </div>
+      );
+    }
+
+    // ─── App ──────────────────────────────────────────────────────────────
+    function App() {
+      const [activeTab,    setActiveTab]    = useState("batters");
+      const [batterData,   setBatterData]   = useState(null);
+      const [pitcherData,  setPitcherData]  = useState(null);
+      const [batterError,  setBatterError]  = useState(null);
+      const [pitcherError, setPitcherError] = useState(null);
+
+      useEffect(() => {
+        fetch("./merged_batter_data.json")
+          .then(r => { if (!r.ok) throw new Error("merged not found"); return r.json(); })
+          .catch(() => fetch("./batter_splits.json").then(r => {
+            if (!r.ok) throw new Error("Run python3 mlb_stats_scraper.py first");
+            return r.json();
+          }))
+          .then(setBatterData)
+          .catch(e => setBatterError(e.message));
+
+        fetch("./pitcher_splits.json")
+          .then(r => { if (!r.ok) throw new Error("not found"); return r.json(); })
+          .then(setPitcherData)
+          .catch(e => setPitcherError(e.message));
+      }, []);
+
+      const errorStyle = { ...S.base, color: "#c00" };
+
+      return (
+        <div style={S.base}>
+          <div style={S.tabRow}>
+            <button style={S.tab(activeTab === "batters")}  onClick={() => setActiveTab("batters")}>⚾ Batting Props</button>
+            <button style={S.tab(activeTab === "pitchers")} onClick={() => setActiveTab("pitchers")}>🎯 Pitcher Props</button>
+          </div>
+
+          {activeTab === "batters" && (
+            batterError
+              ? <div style={errorStyle}><strong>Error:</strong> {batterError}<br /><br />Run <code>python3 mlb_stats_scraper.py && python3 merge_props.py</code> then serve with <code>python3 -m http.server 8080</code></div>
+              : !batterData
+              ? <div style={{ color: "#888" }}>Loading batter data…</div>
+              : <BattersSection rawData={batterData} />
+          )}
+
+          {activeTab === "pitchers" && (
+            pitcherError
+              ? <div style={errorStyle}><strong>Error:</strong> {pitcherError}<br /><br />Run <code>python3 mlb_pitcher_scraper.py</code> first.</div>
+              : !pitcherData
+              ? <div style={{ color: "#888" }}>Loading pitcher data…</div>
+              : <PitchersSection rawData={pitcherData} />
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
