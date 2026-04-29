@@ -52,19 +52,16 @@ def get_all_teams():
 def get_roster(team_id, season):
     data = get(f"/teams/{team_id}/roster",
                params={"rosterType": "active", "season": season})
-    return [p["person"] for p in data.get("roster", [])]
+    return [
+        p["person"] for p in data.get("roster", [])
+        if p.get("position", {}).get("code") != "P"
+    ]
 
 
 # ── split fetchers ──────────────────────────────────────────────────────────
 
 def get_handedness_splits(player_id, season):
     """Returns vs_lhp and vs_rhp hitting stats."""
-    data = get(f"/people/{player_id}/stats",
-               params={"stats": "vsTeamTotal5Y,pitchArsenal",
-                       "group": "hitting",
-                       "season": season,
-                       "sportId": 1})
-    # Try the built-in vsPitcherHand split group
     data2 = get(f"/people/{player_id}/stats",
                 params={"stats": "statSplits",
                         "group": "hitting",

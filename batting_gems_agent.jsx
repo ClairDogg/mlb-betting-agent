@@ -262,7 +262,7 @@ function BatterCard({ batter }) {
 }
 
 export default function HiddenGemsAgent() {
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("bets");
   const [rawData, setRawData] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
@@ -280,6 +280,7 @@ export default function HiddenGemsAgent() {
   }, [rawData]);
 
   const filtered = useMemo(() => {
+    if (filter === "bets")  return scored.filter(b => b.hrBet.startsWith("BET") || b.hrBet.startsWith("★") || b.hitBet.startsWith("BET") || b.hitBet.startsWith("★"));
     if (filter === "best")  return scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★"));
     if (filter === "hr")    return scored.filter(b => b.hrBet !== "PASS");
     if (filter === "hits")  return scored.filter(b => b.hitBet !== "PASS");
@@ -315,11 +316,12 @@ export default function HiddenGemsAgent() {
       {/* Filters */}
       <div style={STYLE.filterRow}>
         {[
-          ["all",  "All Players"],
+          ["bets", "BET OVER+"],
           ["best", "★ Best Bets"],
           ["plus", "+ Odds Only"],
           ["hr",   "HR Props"],
           ["hits", "Hit Props"],
+          ["all",  "All Players"],
         ].map(([key, label]) => (
           <button key={key} style={STYLE.filterBtn(filter === key)}
                   onClick={() => setFilter(key)}>{label}</button>
