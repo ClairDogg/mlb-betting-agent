@@ -14,12 +14,14 @@ echo "Step 2: Fetching pitcher stats..."
 python3 mlb_pitcher_scraper.py
 echo ""
 
-echo "Step 3: Merging batter props..."
-echo "  (If you have DraftKings props, move mlb_batter_props.json here first.)"
-echo "  (See fetch_dk_props_browser.js for instructions on getting props from DraftKings.)"
+echo "Step 3: Fetching DraftKings props..."
+python3 mlb_props_scraper.py
+echo ""
+
+echo "Step 4: Merging props with batter splits..."
 python3 merge_props.py
 echo ""
 
-echo "Step 4: Starting local server on http://localhost:8080"
+echo "Step 5: Starting local server on http://localhost:8080"
 echo "  Open that URL in your browser, then Ctrl+C here when done."
 python3 -m http.server 8080
