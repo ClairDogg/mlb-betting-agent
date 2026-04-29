@@ -395,8 +395,9 @@
           .then(setBatterData)
           .catch(e => setBatterError(e.message));
 
-        fetch("./pitcher_splits.json")
+        fetch("./merged_pitcher_data.json")
           .then(r => { if (!r.ok) throw new Error("not found"); return r.json(); })
+          .catch(() => fetch("./pitcher_splits.json").then(r => r.json()))
           .then(setPitcherData)
           .catch(e => setPitcherError(e.message));
       }, []);
