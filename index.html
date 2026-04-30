@@ -103,7 +103,7 @@
       const hitPk    = scorePark(b, "hits");
       const hitTotal = m.score + ha.score + hitPk.score + bvp.score;
       const hitPlus  = isPlusMoney(b.hit_odds);
-      const hitBet   = hitTotal >= 3 ? (hitPlus ? "★ BEST BET" : "BET OVER") : hitTotal >= 2 ? "LEAN OVER" : "PASS";
+      const hitBet   = hitTotal >= 2 ? (hitPlus ? "★ BEST BET" : "BET OVER") : hitTotal >= 1 ? "LEAN OVER" : "PASS";
 
       return { ...b, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvpAvg: bvp, bvpHR }, gemScore: hrTotal, hrBet, hrPlus, hitBet, hitPlus };
     }
