@@ -262,7 +262,7 @@ function BatterCard({ batter }) {
 }
 
 export default function HiddenGemsAgent() {
-  const [filter, setFilter] = useState("bets");
+  const [filter, setFilter] = useState("best");
   const [rawData, setRawData] = useState(null);
   const [loadError, setLoadError] = useState(null);
 

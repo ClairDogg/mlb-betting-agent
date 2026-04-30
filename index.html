@@ -293,7 +293,7 @@
 
     // ─── Batters section ──────────────────────────────────────────────────
     function BattersSection({ rawData }) {
-      const [filter, setFilter] = useState("bets");
+      const [filter, setFilter] = useState("best");
 
       const scored = useMemo(() => {
         if (!rawData) return [];
@@ -337,7 +337,7 @@
 
     // ─── Pitchers section ─────────────────────────────────────────────────
     function PitchersSection({ rawData }) {
-      const [filter, setFilter] = useState("bets");
+      const [filter, setFilter] = useState("best");
 
       const scored = useMemo(() => {
         if (!rawData) return [];
