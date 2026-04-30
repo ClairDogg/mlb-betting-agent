@@ -34,20 +34,36 @@ def get_todays_events():
 
 
 def get_event_props(event_id):
-    r = requests.get(f"{BASE}/sports/baseball_mlb/events/{event_id}/odds",
-                     params={
-                         "apiKey":      API_KEY,
-                         "regions":     "us",
-                         "markets":     "batter_hits,batter_home_runs,pitcher_strikeouts",
-                         "oddsFormat":  "american",
-                         "bookmakers":  "draftkings",
-                     },
-                     timeout=15)
-    if r.status_code == 422:
-        return None  # props not available for this game yet
-    r.raise_for_status()
-    time.sleep(0.3)
-    return r.json()
+    # DraftKings: hits + strikeouts | BetRivers: HR props
+    # Fetch both and merge — no single bookmaker covers all three markets
+    results = []
+    for bookmaker, markets in [
+        ("draftkings", "batter_hits,pitcher_strikeouts"),
+        ("betrivers",  "batter_home_runs"),
+    ]:
+        r = requests.get(f"{BASE}/sports/baseball_mlb/events/{event_id}/odds",
+                         params={
+                             "apiKey":     API_KEY,
+                             "regions":    "us",
+                             "markets":    markets,
+                             "oddsFormat": "american",
+                             "bookmakers": bookmaker,
+                         },
+                         timeout=15)
+        if r.status_code == 422:
+            continue
+        r.raise_for_status()
+        time.sleep(0.3)
+        results.append(r.json())
+
+    if not results:
+        return None
+
+    # Merge bookmaker data into the first result
+    merged = results[0]
+    for extra in results[1:]:
+        merged.setdefault("bookmakers", []).extend(extra.get("bookmakers", []))
+    return merged
 
 
 def parse_props(events_data):
@@ -57,11 +73,10 @@ def parse_props(events_data):
 
     for event in events_data:
         bookmakers = event.get("bookmakers", [])
-        dk = next((b for b in bookmakers if b["key"] == "draftkings"), None)
-        if not dk:
+        if not bookmakers:
             continue
 
-        for market in dk.get("markets", []):
+        for market in [m for bk in bookmakers for m in bk.get("markets", [])]:
             key = market["key"]
             for outcome in market.get("outcomes", []):
                 if outcome.get("name") != "Over":
