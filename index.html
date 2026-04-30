@@ -97,7 +97,7 @@
       // HR score includes all factors + HR history vs this pitcher
       const hrTotal = h.score + m.score + ha.score + pk.score + bvp.score + bvpHR.score;
       const hrPlus  = isPlusMoney(b.hr_odds);
-      const hrBet   = hrTotal >= 3 ? (hrPlus ? "★ BEST BET" : "BET OVER") : hrTotal >= 2 ? "LEAN OVER" : "PASS";
+      const hrBet   = hrTotal >= 5 ? (hrPlus ? "★ BEST BET" : "BET OVER") : hrTotal >= 3 ? "LEAN OVER" : "PASS";
 
       // Hit score: monthly + homeaway + park(hits) + bvp avg
       const hitPk    = scorePark(b, "hits");
