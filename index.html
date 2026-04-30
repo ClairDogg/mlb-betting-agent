@@ -41,17 +41,16 @@
       const ab   = (hand === "L" ? b.vs_lhp_ab : b.vs_rhp_ab) || 0;
       if (ab < 20) return { score: 0, note: `vs ${hand}HP — thin sample (${ab} AB)` };
       if (avg >= 0.300) return { score: 2, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB) ✓` };
-      if (avg >= 0.265) return { score: 1, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB)` };
-      return { score: 0, note: `vs ${hand}HP ${fmtAvg(avg)} avg — weak` };
+      if (avg >= 0.300) return { score: 1, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB) ✓` };
+      return { score: 0, note: `vs ${hand}HP ${fmtAvg(avg)} avg — below .300` };
     }
 
     function scoreMonthly(b) {
       const month = getCurrentMonth();
       const avg   = parseFloat(b[`${month}_avg`]) || 0;
       if (!avg) return { score: 0, note: `${month} — no data` };
-      if (avg >= 0.310) return { score: 2, note: `${month} avg ${fmtAvg(avg)} — peak month ✓` };
-      if (avg >= 0.270) return { score: 1, note: `${month} avg ${fmtAvg(avg)}` };
-      return { score: 0, note: `${month} avg ${fmtAvg(avg)} — cold month` };
+      if (avg >= 0.300) return { score: 1, note: `${month} avg ${fmtAvg(avg)} ✓` };
+      return { score: 0, note: `${month} avg ${fmtAvg(avg)} — below .300` };
     }
 
     function scoreHomeAway(b) {
@@ -73,29 +72,40 @@
     function scoreBvP(b) {
       const ab  = b.bvp_ab || 0;
       const avg = parseFloat(b.bvp_avg) || 0;
-      if (ab < 5) return { score: 0, note: `vs ${b.opp_pitcher_name} — ${ab} AB, too thin` };
-      if (avg >= 0.350) return { score: 2, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB ✓` };
-      if (avg >= 0.270) return { score: 1, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB` };
-      return { score: -1, note: `vs ${b.opp_pitcher_name} ${fmtAvg(avg)} in ${ab} AB ✗` };
+      if (ab < 5) return { score: 0, note: `Career vs ${b.opp_pitcher_name} — ${ab} AB, too thin` };
+      if (avg >= 0.300) return { score: 1, note: `Career avg ${fmtAvg(avg)} vs ${b.opp_pitcher_name} in ${ab} AB ✓` };
+      return { score: 0, note: `Career avg ${fmtAvg(avg)} vs ${b.opp_pitcher_name} — below .300` };
+    }
+
+    function scoreBvPHR(b) {
+      const hr = b.bvp_hr || 0;
+      const ab = b.bvp_ab || 0;
+      if (ab < 5) return { score: 0, note: `HR vs ${b.opp_pitcher_name} — ${ab} AB, too thin` };
+      if (hr >= 2) return { score: 2, note: `${hr} HR off ${b.opp_pitcher_name} in ${ab} AB ✓` };
+      if (hr === 1) return { score: 1, note: `1 HR off ${b.opp_pitcher_name} in ${ab} AB` };
+      return { score: 0, note: `0 HR off ${b.opp_pitcher_name} in ${ab} AB` };
     }
 
     function scoreBatter(b) {
-      const h   = scoreHandedness(b);
-      const m   = scoreMonthly(b);
-      const ha  = scoreHomeAway(b);
-      const pk  = scorePark(b, "hr");
-      const bvp = scoreBvP(b);
-      const total = h.score + m.score + ha.score + pk.score + bvp.score;
+      const h     = scoreHandedness(b);
+      const m     = scoreMonthly(b);
+      const ha    = scoreHomeAway(b);
+      const pk    = scorePark(b, "hr");
+      const bvp   = scoreBvP(b);
+      const bvpHR = scoreBvPHR(b);
 
-      const hrPlus = isPlusMoney(b.hr_odds);
-      const hrBet  = total >= 3 ? (hrPlus ? "★ BEST BET" : "BET OVER") : total >= 2 ? "LEAN OVER" : "PASS";
+      // HR score includes all factors + HR history vs this pitcher
+      const hrTotal = h.score + m.score + ha.score + pk.score + bvp.score + bvpHR.score;
+      const hrPlus  = isPlusMoney(b.hr_odds);
+      const hrBet   = hrTotal >= 3 ? (hrPlus ? "★ BEST BET" : "BET OVER") : hrTotal >= 2 ? "LEAN OVER" : "PASS";
 
+      // Hit score: monthly + homeaway + park(hits) + bvp avg
       const hitPk    = scorePark(b, "hits");
       const hitTotal = m.score + ha.score + hitPk.score + bvp.score;
       const hitPlus  = isPlusMoney(b.hit_odds);
       const hitBet   = hitTotal >= 3 ? (hitPlus ? "★ BEST BET" : "BET OVER") : hitTotal >= 2 ? "LEAN OVER" : "PASS";
 
-      return { ...b, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvp }, gemScore: total, hrBet, hrPlus, hitBet, hitPlus };
+      return { ...b, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvpAvg: bvp, bvpHR }, gemScore: hrTotal, hrBet, hrPlus, hitBet, hitPlus };
     }
 
     // ─── PITCHER scoring ──────────────────────────────────────────────────
