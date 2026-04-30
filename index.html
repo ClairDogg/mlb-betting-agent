@@ -40,7 +40,6 @@
       const avg  = parseFloat(hand === "L" ? b.vs_lhp_avg : b.vs_rhp_avg) || 0;
       const ab   = (hand === "L" ? b.vs_lhp_ab : b.vs_rhp_ab) || 0;
       if (ab < 20) return { score: 0, note: `vs ${hand}HP — thin sample (${ab} AB)` };
-      if (avg >= 0.300) return { score: 2, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB) ✓` };
       if (avg >= 0.300) return { score: 1, note: `vs ${hand}HP ${fmtAvg(avg)} avg (${ab} AB) ✓` };
       return { score: 0, note: `vs ${hand}HP ${fmtAvg(avg)} avg — below .300` };
     }
@@ -105,7 +104,15 @@
       const hitPlus  = isPlusMoney(b.hit_odds);
       const hitBet   = hitTotal >= 2 ? (hitPlus ? "★ BEST BET" : "BET OVER") : hitTotal >= 1 ? "LEAN OVER" : "PASS";
 
-      return { ...b, factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvpAvg: bvp, bvpHR }, gemScore: hrTotal, hrBet, hrPlus, hitBet, hitPlus };
+      return {
+        ...b,
+        hrFactors:  { handedness: h, monthly: m, homeaway: ha, park: pk, bvpAvg: bvp, bvpHR },
+        hitFactors: { monthly: m, homeaway: ha, park: hitPk, bvpAvg: bvp },
+        gemScore: hrTotal,
+        hitScore: hitTotal,
+        hrBet, hrPlus,
+        hitBet, hitPlus,
+      };
     }
 
     // ─── PITCHER scoring ──────────────────────────────────────────────────
@@ -202,10 +209,26 @@
       return S.verdictPass;
     }
 
-    // ─── BatterCard ───────────────────────────────────────────────────────
-    function BatterCard({ batter: b }) {
+    // ─── Shared batter card header ────────────────────────────────────────
+    function BatterHeader({ b, score, maxScore, open, setOpen }) {
+      const isBest = open !== undefined ? false : false; // handled by parent
+      return (
+        <div style={S.cardHeader(true)} onClick={() => setOpen(o => !o)}>
+          <span>
+            {b.player_name}
+            <span style={{ fontWeight: 400, fontSize: 13, marginLeft: 10, opacity: 0.75 }}>
+              {b.team_name} · {b.is_home ? "Home" : "Away"} vs {b.opp_pitcher_hand}HP {b.opp_pitcher_name} · {b.venue}
+            </span>
+          </span>
+          <span style={S.gemScore}>{score >= 5 ? "💎 " : ""}{score}/{maxScore}</span>
+        </div>
+      );
+    }
+
+    // ─── HRCard ───────────────────────────────────────────────────────────
+    function HRCard({ batter: b }) {
       const [open, setOpen] = useState(false);
-      const isBest = b.hrBet.startsWith("★") || b.hitBet.startsWith("★");
+      const isBest = b.hrBet.startsWith("★");
       return (
         <div style={S.card(isBest)}>
           <div style={S.cardHeader(isBest)} onClick={() => setOpen(o => !o)}>
@@ -215,7 +238,7 @@
                 {b.team_name} · {b.is_home ? "Home" : "Away"} vs {b.opp_pitcher_hand}HP {b.opp_pitcher_name} · {b.venue}
               </span>
             </span>
-            <span style={S.gemScore}>{b.gemScore >= 3 ? "💎 " : ""}{b.gemScore}/7</span>
+            <span style={S.gemScore}>{b.gemScore >= 5 ? "💎 " : ""}{b.gemScore}/9</span>
           </div>
           <div style={S.body}>
             <div style={S.propHeader}><span>Prop</span><span>Line</span><span>Odds</span><span></span><span>Verdict</span></div>
@@ -226,6 +249,41 @@
               <span></span>
               <span style={verdictStyle(b.hrBet)}>{b.hrBet}</span>
             </div>
+            {open && (
+              <div style={S.factorList}>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 8, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.5px" }}>Factor Breakdown</div>
+                {Object.entries(b.hrFactors).map(([k, f]) => (
+                  <div key={k} style={S.factorRow(f.score)}>
+                    <div style={S.dot(f.score)} /><span>{f.note}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "#bbb", marginTop: 6, cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
+              {open ? "▲ hide factors" : "▼ show factors"}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── HitCard ──────────────────────────────────────────────────────────
+    function HitCard({ batter: b }) {
+      const [open, setOpen] = useState(false);
+      const isBest = b.hitBet.startsWith("★");
+      return (
+        <div style={S.card(isBest)}>
+          <div style={S.cardHeader(isBest)} onClick={() => setOpen(o => !o)}>
+            <span>
+              {b.player_name}
+              <span style={{ fontWeight: 400, fontSize: 13, marginLeft: 10, opacity: 0.75 }}>
+                {b.team_name} · {b.is_home ? "Home" : "Away"} vs {b.opp_pitcher_hand}HP {b.opp_pitcher_name} · {b.venue}
+              </span>
+            </span>
+            <span style={S.gemScore}>{b.hitScore >= 4 ? "💎 " : ""}{b.hitScore}/6</span>
+          </div>
+          <div style={S.body}>
+            <div style={S.propHeader}><span>Prop</span><span>Line</span><span>Odds</span><span></span><span>Verdict</span></div>
             <div style={S.propRow}>
               <span>Hits</span>
               <span>{b.hit_line ?? "—"}</span>
@@ -236,7 +294,7 @@
             {open && (
               <div style={S.factorList}>
                 <div style={{ fontSize: 11, color: "#aaa", marginTop: 8, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.5px" }}>Factor Breakdown</div>
-                {Object.entries(b.factors).map(([k, f]) => (
+                {Object.entries(b.hitFactors).map(([k, f]) => (
                   <div key={k} style={S.factorRow(f.score)}>
                     <div style={S.dot(f.score)} /><span>{f.note}</span>
                   </div>
@@ -301,8 +359,51 @@
       );
     }
 
-    // ─── Batters section ──────────────────────────────────────────────────
-    function BattersSection({ rawData }) {
+    // ─── Hits section ─────────────────────────────────────────────────────
+    function HitsSection({ rawData }) {
+      const [filter, setFilter] = useState("best");
+
+      const scored = useMemo(() => {
+        if (!rawData) return [];
+        return rawData.map(scoreBatter).sort((a, b) => b.hitScore - a.hitScore);
+      }, [rawData]);
+
+      const filtered = useMemo(() => {
+        if (filter === "best") return scored.filter(b => b.hitBet.startsWith("★"));
+        if (filter === "bets") return scored.filter(b => b.hitBet.startsWith("BET") || b.hitBet.startsWith("★"));
+        if (filter === "plus") return scored.filter(b => b.hitPlus);
+        if (filter === "lean") return scored.filter(b => b.hitBet !== "PASS");
+        return scored;
+      }, [scored, filter]);
+
+      const bestCount = scored.filter(b => b.hitBet.startsWith("★")).length;
+      const pulledAt  = rawData?.[0]?.pulled_at ? new Date(rawData[0].pulled_at).toLocaleString() : "unknown";
+
+      return (
+        <div>
+          <div style={S.header}>
+            <div>
+              <div style={S.title}>Hitting Props</div>
+              <div style={S.subtitle}>{rawData?.length ?? 0} batters · data pulled {pulledAt}</div>
+            </div>
+            <div style={S.bestCount}>★ Best Bets: {bestCount}</div>
+          </div>
+          <div style={S.filterRow}>
+            {[["best","★ Best Bets"],["bets","BET OVER+"],["plus","+ Odds Only"],["lean","All Plays"],["all","All Players"]].map(([key, label]) => (
+              <button key={key} style={S.filterBtn(filter === key)} onClick={() => setFilter(key)}>{label}</button>
+            ))}
+          </div>
+          {filtered.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>No players match this filter.</div>}
+          {filtered.map(b => <HitCard key={b.player_id || b.player_name} batter={b} />)}
+          <div style={S.footer}>
+            Hit score = monthly avg + home/away avg + park hit factor + career BvP · score ≥2 = BET · plus money = ★ BEST BET
+          </div>
+        </div>
+      );
+    }
+
+    // ─── HR section ───────────────────────────────────────────────────────
+    function HRSection({ rawData }) {
       const [filter, setFilter] = useState("best");
 
       const scored = useMemo(() => {
@@ -311,35 +412,34 @@
       }, [rawData]);
 
       const filtered = useMemo(() => {
-        if (filter === "bets") return scored.filter(b => b.hrBet.startsWith("BET") || b.hrBet.startsWith("★") || b.hitBet.startsWith("BET") || b.hitBet.startsWith("★"));
-        if (filter === "best") return scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★"));
-        if (filter === "hr")   return scored.filter(b => b.hrBet !== "PASS");
-        if (filter === "hits") return scored.filter(b => b.hitBet !== "PASS");
-        if (filter === "plus") return scored.filter(b => b.hrPlus || b.hitPlus);
+        if (filter === "best") return scored.filter(b => b.hrBet.startsWith("★"));
+        if (filter === "bets") return scored.filter(b => b.hrBet.startsWith("BET") || b.hrBet.startsWith("★"));
+        if (filter === "plus") return scored.filter(b => b.hrPlus);
+        if (filter === "lean") return scored.filter(b => b.hrBet !== "PASS");
         return scored;
       }, [scored, filter]);
 
-      const bestCount = scored.filter(b => b.hrBet.startsWith("★") || b.hitBet.startsWith("★")).length;
+      const bestCount = scored.filter(b => b.hrBet.startsWith("★")).length;
       const pulledAt  = rawData?.[0]?.pulled_at ? new Date(rawData[0].pulled_at).toLocaleString() : "unknown";
 
       return (
         <div>
           <div style={S.header}>
             <div>
-              <div style={S.title}>Batting Props — HR & Hits</div>
+              <div style={S.title}>HR Props</div>
               <div style={S.subtitle}>{rawData?.length ?? 0} batters · data pulled {pulledAt}</div>
             </div>
             <div style={S.bestCount}>★ Best Bets: {bestCount}</div>
           </div>
           <div style={S.filterRow}>
-            {[["bets","BET OVER+"],["best","★ Best Bets"],["plus","+ Odds Only"],["hr","HR Props"],["hits","Hit Props"],["all","All Players"]].map(([key, label]) => (
+            {[["best","★ Best Bets"],["bets","BET OVER+"],["plus","+ Odds Only"],["lean","All Plays"],["all","All Players"]].map(([key, label]) => (
               <button key={key} style={S.filterBtn(filter === key)} onClick={() => setFilter(key)}>{label}</button>
             ))}
           </div>
           {filtered.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>No players match this filter.</div>}
-          {filtered.map(b => <BatterCard key={b.player_id || b.player_name} batter={b} />)}
+          {filtered.map(b => <HRCard key={b.player_id || b.player_name} batter={b} />)}
           <div style={S.footer}>
-            Gem score = handedness + monthly + home/away + park + BvP · max 7 · score ≥3 = BET · plus money + score ≥3 = ★ BEST BET
+            HR score = handedness + monthly + home/away + park HR factor + career BvP avg + HR history vs pitcher · score ≥5 = BET · plus money = ★ BEST BET
           </div>
         </div>
       );
@@ -389,7 +489,7 @@
 
     // ─── App ──────────────────────────────────────────────────────────────
     function App() {
-      const [activeTab,    setActiveTab]    = useState("batters");
+      const [activeTab,    setActiveTab]    = useState("hits");
       const [batterData,   setBatterData]   = useState(null);
       const [pitcherData,  setPitcherData]  = useState(null);
       const [batterError,  setBatterError]  = useState(null);
@@ -413,20 +513,26 @@
       }, []);
 
       const errorStyle = { ...S.base, color: "#c00" };
+      const batterBlock = batterError
+        ? <div style={errorStyle}><strong>Error:</strong> {batterError}<br /><br />Run <code>python3 mlb_stats_scraper.py && python3 merge_props.py</code> then serve with <code>python3 -m http.server 8080</code></div>
+        : !batterData
+        ? <div style={{ color: "#888" }}>Loading batter data…</div>
+        : null;
 
       return (
         <div style={S.base}>
           <div style={S.tabRow}>
-            <button style={S.tab(activeTab === "batters")}  onClick={() => setActiveTab("batters")}>⚾ Batting Props</button>
-            <button style={S.tab(activeTab === "pitchers")} onClick={() => setActiveTab("pitchers")}>🎯 Pitcher Props</button>
+            <button style={S.tab(activeTab === "hits")}     onClick={() => setActiveTab("hits")}>🎯 Hitting Props</button>
+            <button style={S.tab(activeTab === "hr")}       onClick={() => setActiveTab("hr")}>💪 HR Props</button>
+            <button style={S.tab(activeTab === "pitchers")} onClick={() => setActiveTab("pitchers")}>⚾ Pitcher Props</button>
           </div>
 
-          {activeTab === "batters" && (
-            batterError
-              ? <div style={errorStyle}><strong>Error:</strong> {batterError}<br /><br />Run <code>python3 mlb_stats_scraper.py && python3 merge_props.py</code> then serve with <code>python3 -m http.server 8080</code></div>
-              : !batterData
-              ? <div style={{ color: "#888" }}>Loading batter data…</div>
-              : <BattersSection rawData={batterData} />
+          {activeTab === "hits" && (
+            batterBlock ?? <HitsSection rawData={batterData} />
+          )}
+
+          {activeTab === "hr" && (
+            batterBlock ?? <HRSection rawData={batterData} />
           )}
 
           {activeTab === "pitchers" && (

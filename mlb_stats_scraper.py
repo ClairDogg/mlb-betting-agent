@@ -54,7 +54,7 @@ def get_roster(team_id, season):
                params={"rosterType": "active", "season": season})
     return [
         p["person"] for p in data.get("roster", [])
-        if p.get("position", {}).get("code") != "P"
+        if p.get("position", {}).get("type") != "Pitcher"
     ]
 
 
