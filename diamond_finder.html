@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚾ Diamond Finder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px;
+         background: #fff; color: #111; padding: 20px 24px; max-width: 980px; margin: 0 auto; }
+
+  .header { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 18px;
+            display: flex; justify-content: space-between; align-items: flex-end; }
+  .title { font-size: 20px; font-weight: 700; }
+  .subtitle { font-size: 12px; color: #666; margin-top: 2px; }
+  .counts { font-size: 12px; font-weight: 600; text-align: right; }
+
+  /* Load screen */
+  .load-screen { text-align: center; padding: 60px 20px; }
+  .load-screen h2 { font-size: 22px; margin-bottom: 8px; }
+  .load-screen p { color: #666; margin-bottom: 24px; font-size: 14px; line-height: 1.6; }
+  .load-btn { display: inline-block; padding: 12px 28px; background: #111; color: #fff;
+              font-size: 15px; font-weight: 600; cursor: pointer; border: none; border-radius: 3px; }
+  .load-btn:hover { background: #333; }
+  #fileInput { display: none; }
+  .load-hint { font-size: 12px; color: #aaa; margin-top: 12px; }
+
+  /* Filters */
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn { padding: 4px 12px; font-size: 12px; border: 1px solid #111;
+                background: #fff; color: #111; cursor: pointer; border-radius: 2px; }
+  .filter-btn.active { background: #111; color: #fff; font-weight: 700; }
+
+  /* Cards */
+  .card { border: 1px solid #ddd; margin-bottom: 10px; border-radius: 3px; overflow: hidden; }
+  .card.best { border: 2px solid #111; }
+  .card.coors { border-color: #e8a000; }
+
+  .card-head { display: flex; justify-content: space-between; align-items: center;
+               padding: 7px 12px; background: #f6f6f6; cursor: pointer; }
+  .card.best .card-head { background: #111; color: #fff; }
+  .card.coors .card-head { background: #fff8e6; }
+
+  .player { font-weight: 700; font-size: 14px; }
+  .meta { font-weight: 400; font-size: 12px; margin-left: 8px; opacity: 0.65; }
+  .score-chip { font-size: 11px; font-weight: 700; padding: 2px 8px;
+                border: 1px solid currentColor; border-radius: 10px; white-space: nowrap; }
+
+  /* BvP banner */
+  .bvp-banner { padding: 5px 12px; font-size: 13px; font-weight: 600;
+                border-bottom: 1px solid #eee; }
+  .bvp-elite  { background: #eef7ee; color: #1a6e1a; }
+  .bvp-strong { background: #f0f7ff; color: #1040a0; }
+  .bvp-solid  { background: #f9f9f9; color: #555; }
+  .bvp-dominated { background: #fff0f0; color: #b00; }
+
+  /* Body */
+  .card-body { padding: 8px 12px; }
+  .prop-header { display: grid; grid-template-columns: 110px 55px 70px 1fr;
+                 gap: 6px; font-size: 10px; color: #999; text-transform: uppercase;
+                 letter-spacing: 0.5px; padding-bottom: 3px; border-bottom: 1px solid #eee; margin-bottom: 3px; }
+  .prop-row { display: grid; grid-template-columns: 110px 55px 70px 1fr;
+              gap: 6px; font-size: 13px; padding: 3px 0; align-items: center; }
+  .plus-odds { font-weight: 700; }
+
+  /* Verdicts */
+  .v-diamond-bet { font-weight: 800; font-size: 14px; }
+  .v-diamond     { font-weight: 700; color: #004099; }
+  .v-bet         { font-weight: 600; }
+  .v-lean        { color: #555; }
+  .v-fade        { color: #c00; font-weight: 600; }
+  .v-coors       { color: #b07000; font-weight: 600; }
+  .v-pass        { color: #aaa; }
+
+  /* Factors */
+  .factors { margin-top: 9px; padding-top: 7px; border-top: 1px solid #f0f0f0; display: none; }
+  .factors.open { display: block; }
+  .factor-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .factor-row { display: flex; gap: 6px; align-items: center; padding: 1px 0; font-size: 12px; }
+  .factor-row .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .factor-row .pts { margin-left: auto; font-size: 11px; font-weight: 600; opacity: 0.7; }
+  .f-pos2 { color: #111; } .f-pos2 .dot { background: #111; }
+  .f-pos1 { color: #444; } .f-pos1 .dot { background: #777; }
+  .f-neg  { color: #c00; } .f-neg .dot  { background: #e00; }
+  .f-zero { color: #999; } .f-zero .dot { background: #ccc; }
+  .toggle { font-size: 10px; color: #bbb; cursor: pointer; margin-top: 5px; }
+  .total-line { font-size: 11px; color: #aaa; margin-top: 5px; text-align: right; }
+
+  /* Empty state */
+  .empty { color: #888; font-size: 13px; padding: 24px 0; }
+
+  /* Footer */
+  .footer { font-size: 11px; color: #bbb; margin-top: 20px; border-top: 1px solid #eee;
+            padding-top: 8px; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<!-- Load screen (shown until data is loaded) -->
+<div id="loadScreen" class="load-screen">
+  <h2>⚾ Diamond Finder</h2>
+  <p>
+    Open your <strong>merged_batter_data.json</strong> from<br>
+    <code>~/mlb-betting-agent/merged_batter_data.json</code>
+  </p>
+  <button class="load-btn" onclick="document.getElementById('fileInput').click()">
+    Load merged_batter_data.json
+  </button>
+  <input type="file" id="fileInput" accept=".json" onchange="loadFile(event)">
+  <div class="load-hint">No server needed — runs entirely in your browser</div>
+</div>
+
+<!-- Main app (hidden until data loads) -->
+<div id="app" style="display:none">
+  <div class="header">
+    <div>
+      <div class="title">⚾ Diamond Finder · Batting Props</div>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <div class="counts" id="counts"></div>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <div id="cards"></div>
+
+  <div class="footer">
+    Scoring v2 — BvP anchor: −3→+4 · Handedness: −1→+2 · Recent form: −1→+2 · Park: −1→+1 · Home/Away: −1→+1 ·
+    Max 10 pts · 💎 DIAMOND = BvP strong/elite + score ≥5 · ★ DIAMOND BET = + plus money —
+⚠ Coors (park ≥115) flagged, not credited · MLB Stats API + DraftKings
+  </div>
+</div>
+
+<script>
+// ─── Scoring Engine v2 ────────────────────────────────────────────────────────
+const COORS_THRESHOLD = 115;
+
+function fmtAvg(v) {
+  return String(Math.round(v * 1000)).padStart(3, '0');
+}
+function isPlusMoney(odds) {
+  if (odds == null) return false;
+  return String(odds).startsWith('+') || Number(odds) > 0;
+}
+function formatOdds(odds) {
+  if (odds == null) return '—';
+  const n = Number(odds);
+  if (isNaN(n)) return String(odds);
+  return n > 0 ? `+${n}` : String(n);
+}
+
+function scoreHandedness(b) {
+  const hand = b.pitcher_throws;
+  const avg  = parseFloat(b.handedness_avg) || 0;
+  if (!hand) return { score: 0, note: 'vs pitcher — no handedness data' };
+  if (avg === 0) return { score: 0, note: `vs ${hand}HP — no split data` };
+  if (avg >= 0.300) return { score: 2, note: `vs ${hand}HP .${fmtAvg(avg)} avg ✓` };
+  if (avg >= 0.265) return { score: 1, note: `vs ${hand}HP .${fmtAvg(avg)} avg` };
+  return { score: 0, note: `vs ${hand}HP .${fmtAvg(avg)} avg — weak` };
+}
+
+function scoreMonthly(b) {
+  const avg   = parseFloat(b.monthly_avg) || 0;
+  const month = new Date().toLocaleString('default', { month: 'short' });
+  if (!avg) return { score: 0, note: `${month} — no data` };
+  if (avg >= 0.310) return { score: 2, note: `${month} avg .${fmtAvg(avg)} — hot ✓` };
+  if (avg >= 0.270) return { score: 1, note: `${month} avg .${fmtAvg(avg)}` };
+  return { score: 0, note: `${month} avg .${fmtAvg(avg)} — cold` };
+}
+
+function scoreHomeAway(b) {
+  const avg = parseFloat(b.home_away_avg) || 0;
+  const loc = b.home_away || 'home';
+  if (!avg) return { score: 0, note: `${loc} — no data` };
+  if (avg >= 0.300) return { score: 2, note: `${loc} .${fmtAvg(avg)} avg ✓` };
+  if (avg >= 0.265) return { score: 1, note: `${loc} .${fmtAvg(avg)} avg` };
+  return { score: 0, note: `${loc} .${fmtAvg(avg)} — struggles` };
+}
+
+function scorePark(b) {
+  const factor = parseFloat(b.park_factor) || 100;
+  if (factor >= 108) return { score: 2, note: `park factor ${factor} — hitter friendly ✓` };
+  if (factor >= 102) return { score: 1, note: `park factor ${factor} — slight boost` };
+  if (factor <= 92)  return { score: -1, note: `park factor ${factor} — pitcher park ✗` };
+  return { score: 0, note: `park factor ${factor} — neutral` };
+}
+
+function scoreBvP(b) {
+  const ab  = parseFloat(b.bvp_abs) || 0;
+  const avg = parseFloat(b.bvp_avg) || 0;
+  const pitcher = b.pitcher_throws ? `vs ${b.pitcher_throws}HP pitcher` : 'vs pitcher';
+  if (ab < 5)       return { score: 0,  note: `${pitcher} — ${ab} AB, too thin` };
+  if (avg >= 0.350) return { score: 2,  note: `${pitcher} .${fmtAvg(avg)} in ${ab} AB ✓` };
+  if (avg >= 0.270) return { score: 1,  note: `${pitcher} .${fmtAvg(avg)} in ${ab} AB` };
+  return              { score: -1, note: `${pitcher} .${fmtAvg(avg)} in ${ab} AB ✗` };
+}
+
+function scoreBatter(b) {
+  const h   = scoreHandedness(b);
+  const m   = scoreMonthly(b);
+  const ha  = scoreHomeAway(b);
+  const pk  = scorePark(b);
+  const bvp = scoreBvP(b);
+  const total = h.score + m.score + ha.score + pk.score + bvp.score;
+
+  const hasProps = b.prop_type != null;
+  const plus     = isPlusMoney(b.odds);
+
+  let verdict = 'PASS';
+  if (hasProps) {
+    if (total >= 3 && plus) verdict = '★ BEST BET';
+    else if (total >= 3)    verdict = 'BET OVER';
+    else if (total >= 2)    verdict = 'LEAN OVER';
+  } else {
+    if (total >= 3)         verdict = 'BET OVER (no line yet)';
+    else if (total >= 2)    verdict = 'LEAN OVER';
+  }
+
+  return { ...b,
+    factors: { handedness: h, monthly: m, homeaway: ha, park: pk, bvp },
+    gemScore: total, verdict, plus, hasProps };
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+
+let allScored = [];
+let activeFilter = 'all';
+
+function verdictClass(v) {
+  if (!v) return 'v-pass';
+  if (v.includes('DIAMOND BET')) return 'v-diamond-bet';
+  if (v.includes('DIAMOND'))     return 'v-diamond';
+  if (v.startsWith('BET'))       return 'v-bet';
+  if (v.startsWith('LEAN'))      return 'v-lean';
+  if (v === 'FADE')              return 'v-fade';
+  if (v.includes('COORS'))       return 'v-coors';
+  return 'v-pass';
+}
+
+function factorClass(score) {
+  if (score >= 2) return 'f-pos2';
+  if (score >= 1) return 'f-pos1';
+  if (score < 0)  return 'f-neg';
+  return 'f-zero';
+}
+
+function bvpBannerClass(tier) {
+  if (tier === 'elite')    return 'bvp-banner bvp-elite';
+  if (tier === 'strong')   return 'bvp-banner bvp-strong';
+  if (tier === 'solid')    return 'bvp-banner bvp-solid';
+  if (tier === 'dominated') return 'bvp-banner bvp-dominated';
+  return null;
+}
+
+function renderCard(b, idx) {
+  const isBest  = b.verdict.includes('DIAMOND BET');
+  const bannerClass = bvpBannerClass(b.bvpTier);
+  const showBanner = b.bvpTier && b.bvpTier !== 'none' && b.bvpTier !== 'thin';
+
+  const meta = [b.team, b.home_away, b.venue, b.game].filter(Boolean).join(' · ');
+  const scoreLabel = (b.gemScore >= 5 ? '💎 ' : '') + b.gemScore + '/10';
+
+  let cardClass = 'card';
+  if (isBest) cardClass += ' best';
+  else if (b.isCoors) cardClass += ' coors';
+
+  const factorRows = Object.entries(b.factors).map(([, f]) => `
+    <div class="factor-row ${factorClass(f.score)}">
+      <div class="dot"></div>
+      <span>${f.note}</span>
+      <span class="pts">${f.score > 0 ? '+' + f.score : f.score}</span>
+    </div>`).join('');
+
+  return `
+    <div class="${cardClass}" id="card-${idx}">
+      <div class="card-head" onclick="toggleCard(${idx})">
+        <span>
+          <span class="player">${b.player || b.player_name || '?'}</span>
+          <span class="meta">${meta}</span>
+        </span>
+        <span class="score-chire-chip">${scoreLabel}</span>
+      </div>
+      <div class="card-body">
+        <div class="prop-header"><span>Prop</span><span>Line</span><span>Odds</span><span>Verdict</span></div>
+        <div class="prop-row">
+          <span>${b.prop_type || '—'}</span>
+          <span>${b.line ?? '—'}</span>
+          <span class="${b.plus ? 'plus-odds' : ''}">${formatOdds(b.odds)}</span>
+          <span class="${verdictClass(b.verdict)}">${b.verdict}</span>
+        </div>
+        <div class="factors" id="factors-${idx}">
+          <div class="factor-label">Factor Breakdown</div>
+          ${factorRows}
+          <div class="total-line">Total: ${b.gemScore > 0 ? '+' + b.gemScore : b.gemScore} / 10 max</div>
+        </div>
+        <div class="toggle" onclick="toggleCard(${idx})" id="toggle-${idx}">▼ show factors</div>
+      </div>
+    </div>`;
+}
+
+function toggleCard(idx) {
+  const f = document.getElementById('factors-' + idx);
+  const t = document.getElementById('toggle-' + idx);
+  const open = f.classList.toggle('open');
+  t.textContent = open ? '▲ hide factors' : '▼ show factors';
+}
+
+function getFiltered(filter) {
+  if (filter === 'best')  return allScored.filter(b => b.verdict === '★ BEST BET');
+  if (filter === 'bet')   return allScored.filter(b => b.verdict.startsWith('BET') || b.verdict === '★ BEST BET');
+  if (filter === 'lean')  return allScored.filter(b => b.gemScore >= 2);
+  if (filter === 'plus')  return allScored.filter(b => b.plus);
+  if (filter === 'props') return allScored.filter(b => b.hasProps);
+  return allScored;
+}
+
+function renderApp() {
+  const total      = allScored.length;
+  const bestCount  = allScored.filter(b => b.verdict === '★ BEST BET').length;
+  const betCount   = allScored.filter(b => b.verdict.startsWith('BET') || b.verdict === '★ BEST BET').length;
+
+  document.getElementById('subtitle').textContent =
+    `Scored across: handedness, monthly trend, home/away, park factor, head-to-head · ${total} batters today`;
+  document.getElementById('counts').innerHTML =
+    `★ ${bestCount} best bets · BET ${betCount} total`;
+
+  const filterDefs = [
+    ['all',   `All (${total})`],
+    ['best',  `★ Best Bets (${bestCount})`],
+    ['bet',   `BET OVER (${betCount})`],
+    ['lean',  'Lean Over'],
+    ['plus',  '+ Odds Only'],
+    ['props', 'Has Props'],
+  ];
+  document.getElementById('filters').innerHTML = filterDefs.map(([key, label]) =>
+    `<button class="filter-btn ${activeFilter === key ? 'active' : ''}"
+             onclick="setFilter('${key}')">${label}</button>`
+  ).join('');
+
+  const filtered = getFiltered(activeFilter);
+  const cardsEl = document.getElementById('cards');
+  if (filtered.length === 0) {
+    cardsEl.innerHTML = `<div class="empty">No players match this filter today. Try "Lean Over" or "All".</div>`;
+  } else {
+    cardsEl.innerHTML = filtered.map((b, i) => renderCard(b, i)).join('');
+  }
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  renderApp();
+}
+
+// ─── File Loading ─────────────────────────────────────────────────────────────
+
+function loadFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const raw = JSON.parse(e.target.result);
+      allScored = raw.map(scoreBatter).sort((a, b) => b.gemScore - a.gemScore);
+      document.getElementById('loadScreen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      renderApp();
+    } catch (err) {
+      alert('Error reading file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
