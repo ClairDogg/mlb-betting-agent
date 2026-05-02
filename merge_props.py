@@ -1,112 +1,187 @@
 """
-Merges split data with DraftKings prop odds.
-Uses fuzzy name matching (difflib) since MLB Stats API and Odds API
-use slightly different name formats.
+merge_props.py
+==============
+Combines batter_splits.json (from mlb_stats_scraper.py)
+with mlb_batter_props.json (from fetch_dk_props_browser.js or mlb_props_scraper.py)
+into a single merged dataset ready for the batting_gems_agent.jsx scoring engine.
 
 Outputs:
-  merged_batter_data.json / .csv
-  merged_pitcher_data.json / .csv
+  - merged_batter_data.json   ← used by batting_gems_agent.jsx
+  - merged_batter_data.csv    ← for quick inspection
+
+Usage:
+  python3 merge_props.py
 """
 
 import json
-import difflib
 import pandas as pd
-from pathlib import Path
+from difflib import get_close_matches
 
-CUTOFF = 0.82
+# ── Load data ────────────────────────────────────────────────────────────────
 
-
-def load_json(path):
-    p = Path(path)
-    if not p.exists():
+def load_json(path, label):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        print(f"  Loaded {label}: {len(data)} records")
+        return data
+    except FileNotFoundError:
+        print(f"  WARNING: {path} not found — {label} will be empty")
         return []
-    with open(p) as f:
-        return json.load(f)
+    except Exception as e:
+        print(f"  ERROR loading {path}: {e}")
+        return []
 
 
-def build_index(records):
-    index = {}
-    for r in records:
-        name = r.get("player_name", "").strip()
-        if name:
-            index[name] = r
-    return index
+def normalize_name(name):
+    """Lowercase, strip punctuation for fuzzy matching."""
+    return name.lower().replace(".", "").replace("'", "").replace("-", " ").strip()
 
 
-def fuzzy_lookup(name, index):
-    matches = difflib.get_close_matches(name, list(index.keys()), n=1, cutoff=CUTOFF)
-    return index[matches[0]] if matches else None
+# ── Merge logic ──────────────────────────────────────────────────────────────
 
+def merge(splits, props):
+    """
+    Join splits (keyed by player_name) with props (keyed by player).
+    Uses fuzzy name matching to handle minor spelling differences.
+    """
+    if not splits:
+        print("  No splits data — output will only contain prop data")
+    if not props:
+        print("  No props data — output will only contain splits data")
 
-def merge_batters():
-    batters = load_json("batter_splits.json")
-    props   = load_json("mlb_batter_props.json")
+    # Build lookup: normalized_name -> splits record
+    splits_lookup = {}
+    for s in splits:
+        key = normalize_name(s.get("player_name", ""))
+        splits_lookup[key] = s
 
-    if not batters:
-        print("No data in batter_splits.json — run mlb_stats_scraper.py first.")
-        return
+    splits_names = list(splits_lookup.keys())
 
-    index     = build_index(props)
-    has_props = bool(index)
-    print(f"Batter props: {len(index)} entries loaded." if has_props else "No batter props found — odds will show as N/A.")
-
-    merged, matched = [], 0
-    for batter in batters:
-        record = dict(batter)
-        prop   = fuzzy_lookup(batter["player_name"], index) if has_props else None
-        if prop:
-            record["hr_line"]  = prop.get("hr_line")
-            record["hr_odds"]  = prop.get("hr_odds")
-            record["hit_line"] = prop.get("hit_line")
-            record["hit_odds"] = prop.get("hit_odds")
-            matched += 1
+    # Build lookup: normalized_name -> best prop record (prefer plus-money)
+    props_lookup = {}
+    for p in props:
+        key = normalize_name(p.get("player", ""))
+        if key not in props_lookup:
+            props_lookup[key] = p
         else:
-            record.setdefault("hr_line",  None)
-            record.setdefault("hr_odds",  None)
-            record.setdefault("hit_line", None)
-            record.setdefault("hit_odds", None)
+            # Keep the one with better (higher) odds
+            existing_odds = props_lookup[key].get("odds") or -999
+            new_odds = p.get("odds") or -999
+            if new_odds > existing_odds:
+                props_lookup[key] = p
+
+    merged = []
+    matched = 0
+    unmatched_props = []
+
+    for prop_name, prop in props_lookup.items():
+        # Try exact match first
+        split = splits_lookup.get(prop_name)
+
+        # Fuzzy match if exact fails
+        if split is None and splits_names:
+            close = get_close_matches(prop_name, splits_names, n=1, cutoff=0.82)
+            if close:
+                split = splits_lookup[close[0]]
+
+        record = {
+            # Prop fields
+            "player":       prop.get("player", ""),
+            "prop_type":    prop.get("prop_type", ""),
+            "line":         prop.get("line"),
+            "odds":         prop.get("odds"),
+            "plus_money":   prop.get("plus_money", False),
+            "game":         prop.get("game", ""),
+        }
+
+        if split:
+            matched += 1
+            # Splits fields — used by scoring engine
+            record.update({
+                "bats":                 split.get("bats", ""),
+                "pitcher_throws":       split.get("pitcher_throws", ""),
+                "handedness_avg":       split.get("handedness_avg"),
+                "handedness_ops":       split.get("handedness_ops"),
+                "monthly_avg":          split.get("monthly_avg"),
+                "monthly_ops":          split.get("monthly_ops"),
+                "home_away":            split.get("home_away", ""),
+                "home_away_avg":        split.get("home_away_avg"),
+                "home_away_ops":        split.get("home_away_ops"),
+                "park_factor":          split.get("park_factor"),
+                "venue":                split.get("venue", ""),
+                "bvp_avg":              split.get("bvp_avg"),
+                "bvp_abs":              split.get("bvp_abs"),
+                "team":                 split.get("team", ""),
+                "has_splits":           True,
+            })
+        else:
+            unmatched_props.append(prop.get("player", ""))
+            record["has_splits"] = False
+
         merged.append(record)
 
-    with open("merged_batter_data.json", "w") as f:
-        json.dump(merged, f, indent=2)
-    print(f"Saved: merged_batter_data.json  ({len(merged)} records, {matched} with props)")
-    pd.DataFrame(merged).to_csv("merged_batter_data.csv", index=False)
-    print("Saved: merged_batter_data.csv")
+    # Also include splits-only players (no prop line posted yet)
+    prop_names_seen = set(normalize_name(p.get("player", "")) for p in props)
+    splits_only = 0
+    for split_name, split in splits_lookup.items():
+        if split_name not in prop_names_seen:
+            splits_only += 1
+            merged.append({
+                "player":       split.get("player_name", ""),
+                "prop_type":    None,
+                "line":         None,
+                "odds":         None,
+                "plus_money":   False,
+                "game":         split.get("game", ""),
+                "bats":                 split.get("bats", ""),
+                "pitcher_throws":       split.get("pitcher_throws", ""),
+                "handedness_avg":       split.get("handedness_avg"),
+                "handedness_ops":       split.get("handedness_ops"),
+                "monthly_avg":          split.get("monthly_avg"),
+                "monthly_ops":          split.get("monthly_ops"),
+                "home_away":            split.get("home_away", ""),
+                "home_away_avg":        split.get("home_away_avg"),
+                "home_away_ops":        split.get("home_away_ops"),
+                "park_factor":          split.get("park_factor"),
+                "venue":                split.get("venue", ""),
+                "bvp_avg":              split.get("bvp_avg"),
+                "bvp_abs":              split.get("bvp_abs"),
+                "team":                 split.get("team", ""),
+                "has_splits":           True,
+            })
+
+    print(f"  Props matched to splits: {matched} / {len(props_lookup)}")
+    if unmatched_props:
+        print(f"  Props with no splits match ({len(unmatched_props)}): {', '.join(unmatched_props[:10])}" +
+              (" ..." if len(unmatched_props) > 10 else ""))
+    print(f"  Splits-only players (no prop line): {splits_only}")
+    print(f"  Total merged records: {len(merged)}")
+
+    return merged
 
 
-def merge_pitchers():
-    pitchers = load_json("pitcher_splits.json")
-    props    = load_json("mlb_pitcher_props.json")
-
-    if not pitchers:
-        print("No data in pitcher_splits.json — run mlb_pitcher_scraper.py first.")
-        return
-
-    index     = build_index(props)
-    has_props = bool(index)
-    print(f"Pitcher props: {len(index)} entries loaded." if has_props else "No pitcher props found — odds will show as N/A.")
-
-    merged, matched = [], 0
-    for pitcher in pitchers:
-        record = dict(pitcher)
-        prop   = fuzzy_lookup(pitcher["pitcher_name"], index) if has_props else None
-        if prop:
-            record["k_line"] = prop.get("k_line")
-            record["k_odds"] = prop.get("k_odds")
-            matched += 1
-        else:
-            record.setdefault("k_line", None)
-            record.setdefault("k_odds", None)
-        merged.append(record)
-
-    with open("merged_pitcher_data.json", "w") as f:
-        json.dump(merged, f, indent=2)
-    print(f"Saved: merged_pitcher_data.json  ({len(merged)} records, {matched} with props)")
-    pd.DataFrame(merged).to_csv("merged_pitcher_data.csv", index=False)
-    print("Saved: merged_pitcher_data.csv")
-
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    merge_batters()
+    print("=" * 60)
+    print("Merge Props + Splits")
+    print("=" * 60)
     print()
-    merge_pitchers()
+
+    splits = load_json("batter_splits.json", "batter splits")
+    props   = load_json("mlb_batter_props.json", "batter props")
+
+    print()
+    merged = merge(splits, props)
+
+    # Save
+    with open("merged_batter_data.json", "w") as f:
+        json.dump(merged, f, indent=2)
+    pd.DataFrame(merged).to_csv("merged_batter_data.csv", index=False)
+
+    print()
+    print("Saved: merged_batter_data.json + merged_batter_data.csv")
+    print()
+    print("Next step: git add merged_batter_data.json && git commit -m 'Add merged data'")
+    print("Then open batting_gems_agent.jsx in your browser to see live scores.")
